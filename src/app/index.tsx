@@ -6,7 +6,7 @@ export default function Index() {
 
   return (
     <Inicio
-      onAgendar={() => router.push('/agendar')} // O botao agendar n vai pra pagina de agendamentos, essa parte é o Login, isso é só pra facilitar a visualização da pagina
+      onAgendar={() => router.push('/login')}
       onSaibaMais={() => router.push('/sobre')}
     />
   );
