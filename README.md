@@ -1,5 +1,13 @@
 # Welcome to your Expo app 👋
 
+## Links de agendamento
+
+O aplicativo aceita o caminho `/agendar/<companyId>`, com UUID v7, inclusive pelo esquema `agendeimobile://agendar/<companyId>`. Também é possível colar no aplicativo um link HTTPS da origem configurada em `EXPO_PUBLIC_FRONTEND_URL`; configure `EXPO_PUBLIC_API_URL` separadamente, conforme `.env.example`.
+
+Para que links HTTPS do site abram o aplicativo instalado, a publicação ainda precisa configurar [Android App Links](https://docs.expo.dev/linking/android-app-links/) e [iOS Universal Links](https://docs.expo.dev/linking/ios-universal-links/): definir o domínio real, o pacote Android e o bundle identifier iOS no app, e publicar no domínio os arquivos de associação exigidos, com as assinaturas corretas. Isso exige uma nova build e acesso à configuração do domínio; o esquema personalizado, por si só, não associa links HTTPS. Teste a abertura com o app fechado e aberto em ambas as plataformas.
+
+A versão web está configurada para saída estática. URLs dinâmicas desconhecidas durante a build, incluindo `/agendar/<companyId>`, exigem configuração de hospedagem ou servidor para abertura direta e recarga; não há listagem pública de empresas para pré-gerar esses caminhos. Consulte a documentação do Expo sobre [rotas dinâmicas na renderização estática](https://docs.expo.dev/router/web/static-rendering/#dynamic-routes).
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started
