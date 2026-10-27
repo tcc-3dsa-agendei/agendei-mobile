@@ -23,7 +23,7 @@ function AboutContent() {
           right: width * -0.2,
           top: 20,
         }}
-        onPress={() => router.back()}
+        onPress={() => router.canGoBack() ? router.back() : router.replace("/(dashboard)/home")}
       />
 
       <View>

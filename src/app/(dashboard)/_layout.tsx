@@ -1,8 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
-import { SafeAreaProvider, useSafeAreaInsets} from "react-native-safe-area-context";
-import * as NavigationBar from "expo-navigation-bar";
+import { SafeAreaProvider} from "react-native-safe-area-context";
 import { useSafeColor } from "@/hooks/useSafeColor";
 
 import { Colors } from "@/constants/colors";
@@ -28,7 +27,7 @@ function LayoutContent() {
           headerShown: false,
         }}
       >
-        <Stack.Screen name="index"/>
+        <Stack.Screen name="home"/>
         <Stack.Screen name="about"/>
       </Stack>
     </View>

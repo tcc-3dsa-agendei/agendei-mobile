@@ -1,12 +1,20 @@
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { router, useLocalSearchParams } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
-import React from "react";
+import { Redirect, router, useIsFocused, useLocalSearchParams } from "expo-router";
+import { useBookingCompany } from "@/contexts/booking-company";
 import {
-  Alert,
+  emptyPersonalInfo,
+  personalInfoSchema,
+  type PersonalInfo as PersonalInfoFields,
+  type PersonalInfoErrors,
+} from "@/services/personal-info";
+import { firstIncompleteStep } from "@/services/booking-guard";
+import { backOrReplace } from "@/services/navigation";
+import { ArrowLeft } from "lucide-react-native";
+import React from "react";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import {
   Pressable,
   StyleSheet,
   Text,
@@ -132,6 +140,8 @@ function styleContent(width: number, height: number) {
       color: "#333333",
     },
 
+    error: { color: "#b42318", fontFamily: Fonts.pRegular, fontSize: 13, marginTop: 6 },
+
     reset: {
       width: "100%",
       height: 37,
@@ -194,71 +204,64 @@ function PersonalInfoContent() {
   const { width, height } = useDimension();
   const style = styleContent(width, height);
   const scrollRef = React.useRef<KeyboardAwareScrollView>(null);
-
-  const scrollToInput: NonNullable<
-    React.ComponentProps<typeof TextInput>["onFocus"]
-  > = (event) => {
-    // Also adjust when focus changes while the keyboard is already open.
+  const scrollToInput: NonNullable<React.ComponentProps<typeof TextInput>["onFocus"]> = (event) => {
     scrollRef.current?.scrollToFocusedInput(event.nativeEvent.target, 50);
   };
 
   const params = useLocalSearchParams<{
-    agenda?: string;
     servicoId?: string;
-    servico?: string;
-    duracao?: string;
-    preco?: string;
-    data?: string;
-    horario?: string;
   }>();
 
-  const [nome, setNome] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [telefone, setTelefone] = React.useState("");
+  const { bookingCompany, selectedSlot, customerDraft, setCustomerDraft } = useBookingCompany();
+  const isFocused = useIsFocused();
+  const [errors, setErrors] = React.useState<PersonalInfoErrors>({});
+  const step = firstIncompleteStep(bookingCompany, params.servicoId, selectedSlot, customerDraft);
+  if (step === "link" || !bookingCompany)
+    return isFocused ? <Redirect href="/(schedule)/link-page" /> : null;
+  if (step === "services") return isFocused ? <Redirect href="/(schedule)/services" /> : null;
+  if (step === "datetime")
+    return isFocused ? (
+      <Redirect
+        href={{ pathname: "/(schedule)/datetime", params: { servicoId: params.servicoId } }}
+      />
+    ) : null;
+  const companyId = bookingCompany.id;
+  const fields = customerDraft?.companyId === companyId ? customerDraft.fields : emptyPersonalInfo;
 
-  function formatarTelefone(valor: string) {
-    const numeros = valor.replace(/\D/g, "").slice(0, 11);
-
-    if (numeros.length <= 2) {
-      return numeros;
-    }
-
-    if (numeros.length <= 7) {
-      return `(${numeros.slice(0, 2)}) ${numeros.slice(2)}`;
-    }
-
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`;
+  function updateField(field: keyof PersonalInfoFields, value: string) {
+    setCustomerDraft((previous) => ({
+      companyId,
+      fields: {
+        ...(previous?.companyId === companyId ? previous.fields : emptyPersonalInfo),
+        [field]: value,
+      },
+    }));
+    setErrors((previous) => ({ ...previous, [field]: undefined }));
   }
 
   function limpar() {
-    setNome("");
-    setEmail("");
-    setTelefone("");
+    setCustomerDraft(null);
+    setErrors({});
   }
 
   function proximo() {
-    if (nome.trim().length < 6) {
-      Alert.alert("Atenção", "Digite seu nome completo.");
+    const result = personalInfoSchema.safeParse(fields);
+    if (!result.success) {
+      const nextErrors: PersonalInfoErrors = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0];
+        if ((field === "name" || field === "email" || field === "phone") && !nextErrors[field]) {
+          nextErrors[field] = issue.message;
+        }
+      }
+      setErrors(nextErrors);
       return;
     }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      Alert.alert("Atenção", "Digite um e-mail válido.");
-      return;
-    }
-
-    if (telefone.replace(/\D/g, "").length !== 11) {
-      Alert.alert("Atenção", "Digite um telefone com DDD e 11 dígitos.");
-      return;
-    }
-
+    setErrors({});
     router.push({
-      pathname: "./confirmation",
+      pathname: "/(schedule)/confirmation",
       params: {
-        ...params,
-        nome: nome.trim(),
-        email: email.trim(),
-        telefone,
+        servicoId: params.servicoId,
       },
     });
   }
@@ -274,114 +277,134 @@ function PersonalInfoContent() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Pressable style={style.backIcon} onPress={() => router.back()}>
-          <ArrowLeft size={29} color={Colors.primaria3} />
-        </Pressable>
+          <Pressable
+            style={style.backIcon}
+            onPress={() =>
+              backOrReplace({
+                pathname: "/(schedule)/datetime",
+                params: { servicoId: params.servicoId },
+              })
+            }
+          >
+            <ArrowLeft size={29} color={Colors.primaria3} />
+          </Pressable>
 
-        <View style={style.progress}>
-          {[1, 2, 3, 4].map((etapa) => (
-            <React.Fragment key={etapa}>
-              {etapa > 1 && (
-                <View
-                  style={[
-                    style.progressLine,
-                    etapa <= 3 && style.activeLine,
-                  ]}
-                />
-              )}
+          <View style={style.progress}>
+            {[1, 2, 3, 4].map((etapa) => (
+              <React.Fragment key={etapa}>
+                {etapa > 1 && <View style={[style.progressLine, etapa <= 3 && style.activeLine]} />}
 
-              <View
-                style={[style.circle, etapa <= 3 && style.activeCircle]}
+                <View style={[style.circle, etapa <= 3 && style.activeCircle]} />
+              </React.Fragment>
+            ))}
+          </View>
+
+          <Text style={style.title}>
+            Informe seus dados{"\n"}
+            pessoais
+          </Text>
+
+          <Text style={style.description}>
+            Para a criação do seu agendamento, informe seus dados pessoais abaixo.
+          </Text>
+
+          <View style={style.card}>
+            <View style={style.field}>
+              <View style={style.secTitle}>
+                <Text style={style.secText}>Digite seu nome</Text>
+                <View style={style.secLine} />
+              </View>
+
+              <Text style={style.hint}>De 1 a 150 caracteres</Text>
+
+              <TextInput
+                style={style.input}
+                placeholder="Ex: João Silva"
+                placeholderTextColor="#888888"
+                value={fields.name}
+                onChangeText={(value) => updateField("name", value)}
+                onFocus={scrollToInput}
+                autoCapitalize="words"
               />
-            </React.Fragment>
-          ))}
-        </View>
-
-        <Text style={style.title}>
-          Informe seus dados{"\n"}
-          pessoais
-        </Text>
-
-        <Text style={style.description}>
-          Para a criação do seu agendamento, informe seus dados pessoais
-          abaixo.
-        </Text>
-
-        <View style={style.card}>
-          <View style={style.field}>
-            <View style={style.secTitle}>
-              <Text style={style.secText}>Digite seu nome</Text>
-              <View style={style.secLine} />
+              {errors.name && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.name}
+                </Text>
+              )}
             </View>
 
-            <Text style={style.hint}>Mínimo 6 caracteres</Text>
+            <View style={style.field}>
+              <View style={style.secTitle}>
+                <Text style={style.secText}>Digite seu e-mail</Text>
+                <View style={style.secLine} />
+              </View>
 
-            <TextInput
-              style={style.input}
-              placeholder="Ex: João Silva"
-              placeholderTextColor="#888888"
-              value={nome}
-              onChangeText={setNome}
-              onFocus={scrollToInput}
-              autoCapitalize="words"
-            />
-          </View>
+              <Text style={style.hint}>Informe um e-mail válido</Text>
 
-          <View style={style.field}>
-            <View style={style.secTitle}>
-              <Text style={style.secText}>Digite seu e-mail</Text>
-              <View style={style.secLine} />
+              <TextInput
+                style={style.input}
+                placeholder="Ex: joaosilva@gmail.com"
+                placeholderTextColor="#888888"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={fields.email}
+                onChangeText={(value) => updateField("email", value)}
+                onFocus={scrollToInput}
+              />
+              {errors.email && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.email}
+                </Text>
+              )}
             </View>
 
-            <Text style={style.hint}>Informe um e-mail válido</Text>
+            <View style={style.field}>
+              <View style={style.secTitle}>
+                <Text style={style.secText}>Digite seu número</Text>
+                <View style={style.secLine} />
+              </View>
 
-            <TextInput
-              style={style.input}
-              placeholder="Ex: joaosilva@gmail.com"
-              placeholderTextColor="#888888"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={email}
-              onChangeText={setEmail}
-              onFocus={scrollToInput}
-            />
-          </View>
+              <Text style={style.hint}>Telefone brasileiro com DDD, fixo ou celular</Text>
 
-          <View style={style.field}>
-            <View style={style.secTitle}>
-              <Text style={style.secText}>Digite seu número</Text>
-              <View style={style.secLine} />
+              <TextInput
+                style={style.input}
+                placeholder="Ex: (19) 99999-9999"
+                placeholderTextColor="#888888"
+                keyboardType="phone-pad"
+                value={fields.phone}
+                onChangeText={(value) => updateField("phone", value)}
+                onFocus={scrollToInput}
+              />
+              {errors.phone && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.phone}
+                </Text>
+              )}
             </View>
 
-            <Text style={style.hint}>Mínimo 11 dígitos</Text>
-
-            <TextInput
-              style={style.input}
-              placeholder="Ex: (19) 99999-9999"
-              placeholderTextColor="#888888"
-              keyboardType="phone-pad"
-              value={telefone}
-              onChangeText={(valor) => setTelefone(formatarTelefone(valor))}
-              onFocus={scrollToInput}
-              maxLength={15}
-            />
+            <Pressable style={style.reset} onPress={limpar}>
+              <Text style={style.resetText}>Limpar</Text>
+            </Pressable>
           </View>
 
-          <Pressable style={style.reset} onPress={limpar}>
-            <Text style={style.resetText}>Limpar</Text>
-          </Pressable>
-        </View>
+          <View style={style.buttons}>
+            <Pressable
+              style={style.buttonBack}
+              onPress={() =>
+                backOrReplace({
+                  pathname: "/(schedule)/datetime",
+                  params: { servicoId: params.servicoId },
+                })
+              }
+            >
+              <Text style={style.buttonBackText}>Voltar</Text>
+            </Pressable>
 
-        <View style={style.buttons}>
-          <Pressable style={style.buttonBack} onPress={() => router.back()}>
-            <Text style={style.buttonBackText}>Voltar</Text>
-          </Pressable>
-
-          <Pressable style={style.buttonNext} onPress={proximo}>
-            <Text style={style.buttonNextText}>Próximo</Text>
-          </Pressable>
-        </View>
+            <Pressable style={style.buttonNext} onPress={proximo}>
+              <Text style={style.buttonNextText}>Próximo</Text>
+            </Pressable>
+          </View>
       </KeyboardAwareScrollView>
     </View>
   );

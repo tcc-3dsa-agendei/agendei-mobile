@@ -9,8 +9,7 @@ type Props = {
 };
 
 export function MainLayout({ children }: Props) {
-
-    const { width, height } = useDimension();
+  const { width, height } = useDimension();
 
   return (
     <View style={style.main}>
@@ -32,12 +31,7 @@ export function MainLayout({ children }: Props) {
           resizeMode="contain"
         />
         <LinearGradient
-          colors={[
-            Colors.secundaria2,
-            Colors.secundaria2,
-            Colors.secundaria2,
-            "#e9e9e970",
-          ]}
+          colors={[Colors.secundaria2, Colors.secundaria2, Colors.secundaria2, "#e9e9e970"]}
           locations={[0.1, 0.5, 0.6, 1]}
           style={{
             position: "absolute",
@@ -50,14 +44,18 @@ export function MainLayout({ children }: Props) {
         />
         {/* Fim da estrutura do background */}
       </View>
-      <View style={{
-        position: "absolute",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        width: width,
-        height: height,
-      }}>{children}</View>
+      <View
+        style={{
+          position: "absolute",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          width: width,
+          height: height,
+        }}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -66,6 +64,7 @@ const style = StyleSheet.create({
   main: {
     flex: 1,
   },
+
   mainback: {
     position: "relative",
     backgroundColor: Colors.secundaria2,
@@ -97,5 +96,5 @@ const style = StyleSheet.create({
     width: 530,
     height: 530,
     zIndex: -2,
-  }
+  },
 });

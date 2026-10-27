@@ -2,12 +2,14 @@ import { useRouter } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { useBookingCompany } from "@/contexts/booking-company";
+import { companyIdFromLink, getCompany } from "@/services/company";
 import React from "react";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import {
+  Alert,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,12 +25,7 @@ function styleContent(width: number, height: number) {
       alignItems: "center",
       justifyContent: "center",
     },
-    key: {
-      flexGrow: 1,
-      justifyContent: "center",
-      alignContent: "center",
-      width: width * 0.9,
-    },
+
     onContent: {
       width: "100%",
       height: height * 0.34,
@@ -109,87 +106,144 @@ function styleContent(width: number, height: number) {
 
 function LinkContent() {
   const router = useRouter();
+
   const { width, height } = useDimension();
   const style = styleContent(width, height);
 
   const [link, setLink] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const pending = React.useRef(false);
+  const {
+    setBookingCompany,
+    setSelectedSlot,
+    setCustomerDraft,
+    appointmentState,
+    setAppointmentState,
+  } = useBookingCompany();
 
-  function continuar() {
-    if (link.trim() === "") {
+  async function continuar() {
+    if (pending.current) return;
+    if (appointmentState.status === "submitting") {
+      setError("Aguarde a resposta da reserva em andamento.");
       return;
     }
-
-    // Futuramente, consultar a agenda pelo link.
-    console.log("Link informado:", link);
+    if (appointmentState.status === "uncertain") {
+      Alert.alert(
+        "Resultado da reserva incerto",
+        "A reserva anterior pode ter sido criada. Confira com a empresa antes de iniciar outra reserva, pois isso pode gerar duplicidade.",
+        [
+          { text: "Aguardar", style: "cancel" },
+          {
+            text: "Habilitar nova reserva",
+            onPress: () => setAppointmentState({ status: "idle" }),
+          },
+        ],
+      );
+      return;
+    }
+    pending.current = true;
+    setLoading(true);
+    setError("");
+    setBookingCompany(null);
+    setSelectedSlot(null);
+    setCustomerDraft(null);
+    try {
+      const companyId = companyIdFromLink(link);
+      const company = await getCompany(companyId);
+      setAppointmentState({ status: "idle" });
+      setBookingCompany({ id: companyId, company });
+      router.push("/(schedule)/services");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível consultar a empresa. Tente novamente.",
+      );
+    } finally {
+      pending.current = false;
+      setLoading(false);
+    }
   }
 
   return (
     <View style={style.background}>
       <KeyboardAwareScrollView
-        contentContainerStyle={style.key}
         enableOnAndroid={true}
         extraScrollHeight={5}
+        style={{ width: "100%" }}
+        contentContainerStyle={{
+          alignItems: "center",
+          justifyContent: "center",
+          flexGrow: 1,
+          paddingBottom: 30,
+        }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={{ width: "100%",
-            height: height * 0.5,
-           }}
-          contentContainerStyle={{
-            alignItems: "center",
-            paddingBottom: 0,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={style.onContent}>
-            <Pressable
-              onPress={() => router.push("/(dashboard)")}
-              style={{
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Image
-                style={style.logo}
-                source={require("@/assets/images/logo.png")}
-                resizeMode="contain"
-              />
-
-              <Text style={style.title}>Agendei.com</Text>
-            </Pressable>
-            <View style={style.line} />
-          </View>
-
-          <View style={style.twContent}>
-            <Text style={style.secTitle}>Agende seu{"\n"}horário</Text>
-
-            <Text style={style.description}>
-              Cole o link da agenda da empresa que você recebeu e continue
-            </Text>
-
-            <TextInput
-              style={style.input}
-              placeholder="Cole o link da agenda aqui"
-              placeholderTextColor="#808080"
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={link}
-              onChangeText={setLink}
+        <View style={style.onContent}>
+          <Pressable
+            onPress={() => {
+              setCustomerDraft(null);
+              router.push("/(dashboard)/home");
+            }}
+            disabled={loading}
+            style={{
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <Image
+              style={style.logo}
+              source={require("@/assets/images/logo.png")}
+              resizeMode="contain"
             />
 
-            <Pressable
-              style={({ pressed }) => [
-                style.btContinue,
-                { opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={continuar}
-            >
-              <Text style={style.txtBtContinue}>Continuar</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+            <Text style={style.title}>Agendei.com</Text>
+          </Pressable>
+          <View style={style.line} />
+        </View>
+
+        <View style={style.twContent}>
+          <Text style={style.secTitle}>Agende seu{"\n"}horário</Text>
+
+          <Text style={style.description}>
+            Cole o link da agenda da empresa que você recebeu e continue
+          </Text>
+
+          <TextInput
+            style={style.input}
+            placeholder="Cole o link da agenda aqui"
+            placeholderTextColor="#808080"
+            keyboardType="url"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={link}
+            editable={!loading}
+            onChangeText={(value) => {
+              setLink(value);
+              setError("");
+            }}
+          />
+
+          {error ? (
+            <Text accessibilityRole="alert" style={{ color: "#b42318", marginTop: 8 }}>
+              {error}
+            </Text>
+          ) : null}
+
+          <Pressable
+            style={({ pressed }) => [
+              style.btContinue,
+              { opacity: loading ? 0.6 : pressed ? 0.8 : 1 },
+            ]}
+            onPress={continuar}
+            disabled={loading}
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            <Text style={style.txtBtContinue}>{loading ? "Consultando..." : "Continuar"}</Text>
+          </Pressable>
+        </View>
       </KeyboardAwareScrollView>
     </View>
   );

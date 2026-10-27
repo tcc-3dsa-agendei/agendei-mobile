@@ -79,7 +79,7 @@ function HomeContent() {
         }}>
           <Pressable
             style={style.bnt1}
-            onPress={() => router.push("/(login)/login")}
+            onPress={() => router.push("/(schedule)/link-page")}
             android_ripple={{
               color: Colors.androidRipple,
             }}

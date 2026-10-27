@@ -1,11 +1,11 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
-import { SafeAreaProvider, useSafeAreaInsets} from "react-native-safe-area-context";
-import * as NavigationBar from "expo-navigation-bar";
+import { SafeAreaProvider} from "react-native-safe-area-context";
 import { useSafeColor } from "@/hooks/useSafeColor";
 
 import { Colors } from "@/constants/colors";
+import { BookingCompanyProvider } from "@/contexts/booking-company";
 
 
 function LayoutContent() {
@@ -33,7 +33,7 @@ function LayoutContent() {
         <Stack.Screen name="datetime" />
         <Stack.Screen name="personal-info" />
         <Stack.Screen name="confirmation" />
-        <Stack.Screen name="success" />
+        <Stack.Screen name="success" options={{ gestureEnabled: false }} />
       </Stack>
     </View>
   );
@@ -42,7 +42,9 @@ function LayoutContent() {
 export default function Layout() {
   return (
     <SafeAreaProvider>
-      <LayoutContent />
+      <BookingCompanyProvider>
+        <LayoutContent />
+      </BookingCompanyProvider>
     </SafeAreaProvider>
   );
 }

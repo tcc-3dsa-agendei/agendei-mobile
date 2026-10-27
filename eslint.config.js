@@ -6,5 +6,7 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*'],
+    // These packages use exports that eslint-plugin-import's Node resolver cannot inspect.
+    settings: { 'import/core-modules': ['zod', '@brazilian-utils/brazilian-utils'] },
   },
 ]);

@@ -2,13 +2,19 @@
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { router, useLocalSearchParams } from "expo-router";
+import { useBookingCompany } from "@/contexts/booking-company";
+import { personalInfoSchema } from "@/services/personal-info";
+import { Redirect, router, useIsFocused, useLocalSearchParams } from "expo-router";
+import { AppointmentError, appointmentPayloadSchema, createAppointment, selectedSlotSchema, uncertainAppointmentMessage } from "@/services/appointments";
+import { dateInTimeZone, timeInTimeZone } from "@/services/booking-date";
+import { getCompany } from "@/services/company";
+import { firstIncompleteStep } from "@/services/booking-guard";
+import { backOrReplace } from "@/services/navigation";
 import {
   ArrowLeft,
   CalendarDays,
   Check,
   Clock3,
-  MapPin,
   Scissors,
   UserRound,
   Info,
@@ -239,70 +245,140 @@ function styleContent(width: number, height: number) {
   });
 }
 
+function isPast(startAt: string) {
+  return Date.parse(startAt) <= Date.now();
+}
+
 function ConfirmationContent() {
   const { width, height } = useDimension();
   const style = styleContent(width, height);
-
-  const params = useLocalSearchParams<{
-    agenda?: string;
-    servicoId?: string;
-    servico?: string;
-    duracao?: string;
-    preco?: string;
-    data?: string;
-    horario?: string;
-    nome?: string;
-    email?: string;
-    telefone?: string;
-  }>();
-
-  const [enviando, setEnviando] = React.useState(false);
-
-  function formatarData(valor?: string) {
-    if (!valor) return "Data não informada";
-
-    const partes = valor.split("-");
-    if (partes.length !== 3) return valor;
-
-    const data = new Date(
-      Number(partes[0]),
-      Number(partes[1]) - 1,
-      Number(partes[2])
-    );
-
-    return data.toLocaleDateString("pt-BR", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }
+  const {
+    bookingCompany, customerDraft, selectedSlot, setSelectedSlot,
+    appointmentState, setAppointmentState, setBookingCompany, setCustomerDraft,
+  } = useBookingCompany();
+  const params = useLocalSearchParams<{ servicoId?: string }>();
+  const isFocused = useIsFocused();
+  const [error, setError] = React.useState<AppointmentError | null>(null);
+  const [recoveryDate, setRecoveryDate] = React.useState<string | undefined>();
+  const [recovering, setRecovering] = React.useState(false);
+  const pending = React.useRef(false);
+  const customer = personalInfoSchema.safeParse(
+    customerDraft?.companyId === bookingCompany?.id ? customerDraft?.fields : undefined
+  );
+  const personalInfo = customer.success ? customer.data : null;
+  const selection = selectedSlotSchema.safeParse(selectedSlot);
+  const slot = selection.success && selection.data.companyId === bookingCompany?.id &&
+    selection.data.serviceId === params.servicoId &&
+    dateInTimeZone(new Date(selection.data.startAt), bookingCompany.company.timeZone) === selection.data.date
+    ? selection.data : null;
+  const servico = bookingCompany?.company.services.find((item) => item.id === slot?.serviceId);
+  const enviando = appointmentState.status === "submitting";
+  const busy = enviando || recovering;
+  const failure = appointmentState.status === "uncertain"
+    ? new AppointmentError(uncertainAppointmentMessage, "uncertain") : error;
 
   async function finalizar() {
-    if (enviando) return;
-
-    if (
-      !params.servicoId ||
-      !params.data ||
-      !params.horario ||
-      !params.nome ||
-      !params.email ||
-      !params.telefone
-    ) {
-      Alert.alert(
-        "Dados incompletos",
-        "Retorne e preencha todas as etapas."
-      );
+    if (pending.current || busy || appointmentState.status !== "idle") return;
+    if (!bookingCompany || !servico || !slot || !personalInfo) {
+      setError(new AppointmentError("Retorne e preencha todas as etapas antes de finalizar.", "personal-info"));
       return;
     }
-
-    // Ainda falta integrar o endpoint de criação.
-    // Não navegar para success antes da API confirmar.
-    Alert.alert(
-      "Integração pendente",
-      "A tela está pronta. Falta conectar a criação do agendamento ao backend."
-    );
+    if (isPast(slot.startAt)) {
+      setRecoveryDate(slot.date);
+      setSelectedSlot(null);
+      setError(new AppointmentError("O horário selecionado já passou. Escolha outro horário disponível.", "availability"));
+      return;
+    }
+    const payload = appointmentPayloadSchema.safeParse({
+      serviceId: servico.id,
+      customerName: personalInfo.name,
+      customerEmail: personalInfo.email,
+      customerPhone: personalInfo.phone,
+      startAt: slot.startAt,
+    });
+    if (!payload.success) {
+      setError(new AppointmentError("Revise seus dados antes de finalizar.", "personal-info"));
+      return;
+    }
+    pending.current = true;
+    setError(null);
+    setAppointmentState({ status: "submitting" });
+    try {
+      const appointment = await createAppointment(bookingCompany.id, payload.data);
+      setAppointmentState({
+        status: "created",
+        companyId: bookingCompany.id,
+        companyName: bookingCompany.company.name,
+        serviceName: servico.name,
+        timeZone: bookingCompany.company.timeZone,
+        appointment,
+      });
+      setSelectedSlot(null);
+    } catch (err: unknown) {
+      const failure = err instanceof AppointmentError ? err : new AppointmentError(
+        err instanceof Error ? err.message : "Não foi possível criar a reserva.", "retry"
+      );
+      if (failure.recovery === "availability" || failure.recovery === "services") {
+        setRecoveryDate(slot.date);
+        setSelectedSlot(null);
+      }
+      setError(failure);
+      setAppointmentState({ status: failure.recovery === "uncertain" ? "uncertain" : "idle" });
+    } finally {
+      pending.current = false;
+    }
   }
+
+  async function recover() {
+    if (!failure || busy) return;
+    if (failure.recovery === "uncertain") {
+      Alert.alert("Resultado da reserva incerto", uncertainAppointmentMessage, [
+        { text: "Aguardar", style: "cancel" },
+        { text: "Habilitar nova tentativa", onPress: () => { setAppointmentState({ status: "idle" }); setError(null); } },
+      ]);
+      return;
+    }
+    if (failure.recovery === "company") {
+      setSelectedSlot(null);
+      setCustomerDraft(null);
+      setBookingCompany(null);
+      router.replace("/(schedule)/link-page");
+    } else if (failure.recovery === "availability") {
+      const date = recoveryDate ?? slot?.date;
+      setSelectedSlot(null);
+      router.replace({ pathname: "/(schedule)/datetime", params: { servicoId: params.servicoId, date } });
+    } else if (failure.recovery === "services" && bookingCompany) {
+      setRecovering(true);
+      setSelectedSlot(null);
+      try {
+        const company = await getCompany(bookingCompany.id);
+        setBookingCompany({ id: bookingCompany.id, company });
+        router.replace("/(schedule)/services");
+      } catch (err: unknown) {
+        setError(new AppointmentError(err instanceof Error ? err.message : "Não foi possível atualizar os serviços.", "services"));
+      } finally {
+        setRecovering(false);
+      }
+    } else if (failure.recovery === "personal-info") {
+      router.replace({ pathname: "/(schedule)/personal-info", params: { servicoId: params.servicoId } });
+    } else {
+      setError(null);
+    }
+  }
+
+  if (appointmentState.status === "created") return isFocused ? <Redirect href="/(schedule)/success" /> : null;
+  if (isFocused && !failure && !busy) {
+    const step = firstIncompleteStep(bookingCompany, params.servicoId, selectedSlot, customerDraft);
+    if (step === "link") return <Redirect href="/(schedule)/link-page" />;
+    if (step === "services") return <Redirect href="/(schedule)/services" />;
+    if (step === "datetime") return <Redirect href={{ pathname: "/(schedule)/datetime", params: { servicoId: params.servicoId } }} />;
+    if (step === "personal-info") return <Redirect href={{ pathname: "/(schedule)/personal-info", params: { servicoId: params.servicoId } }} />;
+  }
+  const dateLabel = slot && bookingCompany ? new Intl.DateTimeFormat("pt-BR", {
+    timeZone: bookingCompany.company.timeZone, weekday: "long", day: "numeric", month: "long", year: "numeric",
+  }).format(new Date(slot.startAt)) : "Data não informada";
+  const timeLabel = slot && bookingCompany ? timeInTimeZone(slot.startAt, bookingCompany.company.timeZone) : "--";
+  const canSubmit = !!(bookingCompany && servico && slot && personalInfo) && !busy && !failure;
 
   return (
     <View style={style.background}>
@@ -313,7 +389,8 @@ function ConfirmationContent() {
       >
         <Pressable
           style={style.backIcon}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace({ pathname: "/(schedule)/personal-info", params: { servicoId: params.servicoId } })}
+          disabled={busy}
         >
           <ArrowLeft size={29} color={Colors.primaria3} />
         </Pressable>
@@ -346,18 +423,7 @@ function ConfirmationContent() {
 
             <View style={style.companyInfo}>
               <Text style={style.companyName}>
-                Barbearia NJ
-              </Text>
-              <Text style={style.companyType}>
-                Corte e barba
-              </Text>
-            </View>
-
-            <View style={style.companyAddress}>
-              <MapPin size={13} color="#FFFFFF" />
-              <Text style={style.addressText}>
-                Rua dos Bobos, 67
-                {"\n"}Rosolem - Hortolândia/SP
+                {bookingCompany?.company.name ?? "Empresa não informada"}
               </Text>
             </View>
           </View>
@@ -370,13 +436,13 @@ function ConfirmationContent() {
             <View style={style.infoContent}>
               <Text style={style.label}>Serviço</Text>
               <Text style={style.value}>
-                {params.servico || "Não informado"}
+                {servico?.name ?? "Não informado"}
               </Text>
             </View>
 
             <Text style={style.detail}>
-              {params.duracao || "--"} |{" "}
-              {params.preco || "--"}
+              {servico ? `${servico.durationInMinutes} minutos` : "--"} |{" "}
+              {servico?.price == null ? "Preço não informado" : `Preço: ${servico.price}`}
             </Text>
           </View>
 
@@ -389,7 +455,7 @@ function ConfirmationContent() {
             <View style={style.infoContent}>
               <Text style={style.label}>Data</Text>
               <Text style={style.value}>
-                {formatarData(params.data)}
+                {dateLabel}
               </Text>
             </View>
           </View>
@@ -400,7 +466,7 @@ function ConfirmationContent() {
             <View style={style.infoContent}>
               <Text style={style.label}>Horário</Text>
               <Text style={style.value}>
-                {params.horario || "--"}
+                {timeLabel}
               </Text>
             </View>
           </View>
@@ -416,13 +482,13 @@ function ConfirmationContent() {
             <View style={style.infoContent}>
               <Text style={style.label}>Seus dados</Text>
               <Text style={style.value}>
-                {params.nome || "Não informado"}
+                {personalInfo?.name || "Não informado"}
               </Text>
               <Text style={style.detail}>
-                {params.email || ""}
+                {personalInfo?.email || ""}
               </Text>
               <Text style={style.detail}>
-                {params.telefone || ""}
+                {personalInfo?.phone || ""}
               </Text>
             </View>
           </View>
@@ -431,17 +497,31 @@ function ConfirmationContent() {
             <Info size={17} color={Colors.primaria3} />
 
             <Text style={style.noticeText}>
-              Você receberá um e-mail com todos os
-              detalhes do seu agendamento após a
-              confirmação pelo servidor.
+              A reserva será concluída quando o servidor confirmar sua criação.
             </Text>
           </View>
         </View>
 
+        {failure && (
+          <View style={{ marginTop: 12 }}>
+            <Text accessibilityRole="alert" style={style.description}>{failure.message}</Text>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={recover}>
+              <Text style={style.buttonBackText}>
+                {recovering ? "Atualizando..." : failure.recovery === "availability" ? "Escolher outro horário" :
+                  failure.recovery === "services" ? "Atualizar serviços" : failure.recovery === "company" ? "Conferir link" :
+                  failure.recovery === "personal-info" ? "Revisar dados" : failure.recovery === "uncertain" ? "Sobre uma nova tentativa" : "Revisar e tentar novamente"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+        {!failure && !canSubmit && !busy && (
+          <Text accessibilityRole="alert" style={style.description}>Retorne e preencha todas as etapas antes de finalizar.</Text>
+        )}
         <View style={style.buttons}>
           <Pressable
             style={style.buttonBack}
-            onPress={() => router.back()}
+            onPress={() => backOrReplace({ pathname: "/(schedule)/personal-info", params: { servicoId: params.servicoId } })}
+            disabled={busy}
           >
             <Text style={style.buttonBackText}>
               Voltar
@@ -449,12 +529,13 @@ function ConfirmationContent() {
           </Pressable>
 
           <Pressable
-            style={style.buttonNext}
+            style={[style.buttonNext, { opacity: canSubmit ? 1 : 0.6 }]}
             onPress={finalizar}
-            disabled={enviando}
+            disabled={!canSubmit}
+            accessibilityState={{ disabled: !canSubmit, busy: enviando }}
           >
             <Text style={style.buttonNextText}>
-              Finalizar
+              {enviando ? "Enviando..." : "Finalizar"}
             </Text>
             <Check size={17} color="#FFFFFF" />
           </Pressable>
