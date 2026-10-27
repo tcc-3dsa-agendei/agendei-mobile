@@ -28,7 +28,7 @@ function LayoutContent() {
           headerShown: false,
         }}
       >
-        <Stack.Screen name="index"/>
+        <Stack.Screen name="home"/>
         <Stack.Screen name="about"/>
       </Stack>
     </View>
