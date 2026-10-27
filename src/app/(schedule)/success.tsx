@@ -2,11 +2,13 @@
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { router } from "expo-router";
+import { useBookingCompany } from "@/contexts/booking-company";
+import { router, useFocusEffect } from "expo-router";
 import { Check } from "lucide-react-native";
 import React from "react";
 import {
   Image,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -102,6 +104,24 @@ function styleContent(width: number, height: number) {
       lineHeight: width * 0.075,
     },
 
+    details: {
+      alignSelf: "stretch",
+      marginTop: 20,
+      gap: 12,
+    },
+
+    detailLabel: {
+      color: Colors.secundaria5,
+      fontFamily: Fonts.pRegular,
+      fontSize: width * 0.032,
+    },
+
+    detailValue: {
+      color: Colors.primaria3,
+      fontFamily: Fonts.pBold,
+      fontSize: width * 0.035,
+    },
+
     buttonBack: {
       width: "100%",
       height: 45,
@@ -124,10 +144,30 @@ function styleContent(width: number, height: number) {
 function SuccessContent() {
   const { width, height } = useDimension();
   const style = styleContent(width, height);
+  const { appointmentState, setAppointmentState, setCustomerDraft, setBookingCompany, setSelectedSlot } = useBookingCompany();
 
-  function voltar() {
-    router.replace("/(dashboard)");
-  }
+  const voltar = React.useCallback(() => {
+    if (appointmentState.status === "created") {
+      setCustomerDraft(null);
+      setSelectedSlot(null);
+      setBookingCompany(null);
+      setAppointmentState({ status: "idle" });
+    }
+    router.dismissTo("/(schedule)/link-page");
+  }, [appointmentState.status, setAppointmentState, setBookingCompany, setCustomerDraft, setSelectedSlot]);
+
+  useFocusEffect(React.useCallback(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      voltar();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [voltar]));
+
+  const confirmation = appointmentState.status === "created" ? appointmentState : null;
+  const formatInstant = (instant: string, timeZone: string) => new Intl.DateTimeFormat("pt-BR", {
+    timeZone, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(new Date(instant));
 
   return (
     <View style={style.background}>
@@ -151,25 +191,31 @@ function SuccessContent() {
         </View>
 
         <View style={style.card}>
-          <View style={style.successCircle}>
-            <Check
-              size={width * 0.19}
-              color="#FFFFFF"
-              strokeWidth={1.5}
-            />
-          </View>
-
-          <Text style={style.successTitle}>
-            Tudo certo!
-          </Text>
-
-          <View style={style.smallLine} />
-
-          <Text style={style.successDescription}>
-            Seu agendamento{"\n"}
-            foi concluído com{"\n"}
-            sucesso!
-          </Text>
+          {confirmation ? (
+            <>
+              <View style={style.successCircle}>
+                <Check size={width * 0.19} color="#FFFFFF" strokeWidth={1.5} />
+              </View>
+              <Text style={style.successTitle}>Tudo certo!</Text>
+              <View style={style.smallLine} />
+              <Text style={style.successDescription}>Seu agendamento foi criado.</Text>
+              <View style={style.details}>
+                <View><Text style={style.detailLabel}>Empresa</Text><Text style={style.detailValue}>{confirmation.companyName}</Text></View>
+                <View><Text style={style.detailLabel}>Serviço</Text><Text style={style.detailValue}>{confirmation.serviceName}</Text></View>
+                <View><Text style={style.detailLabel}>Início</Text><Text style={style.detailValue}>{formatInstant(confirmation.appointment.startAt, confirmation.timeZone)}</Text></View>
+                <View><Text style={style.detailLabel}>Término</Text><Text style={style.detailValue}>{formatInstant(confirmation.appointment.endAt, confirmation.timeZone)}</Text></View>
+                <View><Text style={style.detailLabel}>Fuso horário</Text><Text style={style.detailValue}>{confirmation.timeZone}</Text></View>
+                <View><Text style={style.detailLabel}>Situação</Text><Text style={style.detailValue}>Agendado</Text></View>
+                <View><Text style={style.detailLabel}>Código do agendamento</Text><Text selectable style={style.detailValue}>{confirmation.appointment.id}</Text></View>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={style.successTitle}>Confirmação indisponível</Text>
+              <View style={style.smallLine} />
+              <Text style={style.successDescription}>Não há confirmação de agendamento disponível nesta sessão.</Text>
+            </>
+          )}
         </View>
 
         <Pressable
@@ -180,7 +226,7 @@ function SuccessContent() {
           onPress={voltar}
         >
           <Text style={style.buttonBackText}>
-            Voltar
+            Voltar ao início
           </Text>
         </Pressable>
       </ScrollView>

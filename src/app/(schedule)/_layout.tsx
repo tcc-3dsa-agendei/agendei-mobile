@@ -6,6 +6,7 @@ import * as NavigationBar from "expo-navigation-bar";
 import { useSafeColor } from "@/hooks/useSafeColor";
 
 import { Colors } from "@/constants/colors";
+import { BookingCompanyProvider } from "@/contexts/booking-company";
 
 
 function LayoutContent() {
@@ -33,7 +34,7 @@ function LayoutContent() {
         <Stack.Screen name="datetime" />
         <Stack.Screen name="personal-info" />
         <Stack.Screen name="confirmation" />
-        <Stack.Screen name="success" />
+        <Stack.Screen name="success" options={{ gestureEnabled: false }} />
       </Stack>
     </View>
   );
@@ -42,7 +43,9 @@ function LayoutContent() {
 export default function Layout() {
   return (
     <SafeAreaProvider>
-      <LayoutContent />
+      <BookingCompanyProvider>
+        <LayoutContent />
+      </BookingCompanyProvider>
     </SafeAreaProvider>
   );
 }

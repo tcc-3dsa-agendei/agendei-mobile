@@ -1,32 +1,15 @@
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { router } from "expo-router";
+import { useBookingCompany } from "@/contexts/booking-company";
+import { backOrReplace } from "@/services/navigation";
+import { Redirect, router, useIsFocused } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ArrowLeft, Clock3, MapPin } from "lucide-react-native";
+import { ArrowLeft, Clock3 } from "lucide-react-native";
 import { MainLayout } from "@/components/layout-noimages";
 
-const servicos = [
-  {
-    id: 1,
-    nome: "Corte de cabelo",
-    duracao: "30 minutos",
-    preco: "R$35,00",
-  },
-  {
-    id: 2,
-    nome: "Sobrancelha",
-    duracao: "10 minutos",
-    preco: "R$15,00",
-  },
-  {
-    id: 3,
-    nome: "Barba",
-    duracao: "20 minutos",
-    preco: "R$20,00",
-  },
-];
+const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 function styleContent(width: number, height: number) {
   return StyleSheet.create({
@@ -110,22 +93,10 @@ function styleContent(width: number, height: number) {
       marginBottom: 13,
     },
 
-    companyImage: {
-      width: 51,
-      height: 51,
-      borderRadius: 26,
-      backgroundColor: "#969696",
-      marginRight: 12,
-    },
     companyName: {
       color: Colors.primaria3,
       fontFamily: Fonts.pBold,
       fontSize: width * 0.041,
-    },
-    companyType: {
-      color: Colors.primaria3,
-      fontFamily: Fonts.pRegular,
-      fontSize: width * 0.032,
     },
     infoContent: {
       flexDirection: "row",
@@ -253,31 +224,29 @@ function styleContent(width: number, height: number) {
 function SelectServiceContent() {
   const { width, height } = useDimension();
   const style = styleContent(width, height);
+  const { bookingCompany, setSelectedSlot } = useBookingCompany();
+  const isFocused = useIsFocused();
   const [servicoSelecionado, setServicoSelecionado] = React.useState<
-    number | null
+    { companyId: string; serviceId: string } | null
   >(null);
 
+  if (!bookingCompany) return isFocused ? <Redirect href="/(schedule)/link-page" /> : null;
+  const { company } = bookingCompany;
+  const servicos = company.services;
+  const servico = servicoSelecionado?.companyId === bookingCompany.id
+    ? servicos.find((item) => item.id === servicoSelecionado.serviceId)
+    : undefined;
+
   function proximo() {
-  if (servicoSelecionado === null) {
-    return;
+    if (!servico) return;
+
+    router.push({
+      pathname: "/(schedule)/datetime",
+      params: {
+        servicoId: servico.id,
+      },
+    });
   }
-
-  const servico = servicos.find(
-    (item) => item.id === servicoSelecionado
-  );
-
-  if (!servico) return;
-
-  router.push({
-    pathname: "./datetime",
-    params: {
-      servicoId: String(servico.id),
-      servico: servico.nome,
-      duracao: servico.duracao,
-      preco: servico.preco,
-    },
-  });
-}
 
   return (
     <View style={style.background}>
@@ -287,7 +256,7 @@ function SelectServiceContent() {
         showsVerticalScrollIndicator={false}
       >
         <View style={style.header}>
-          <Pressable style={style.backIcon} onPress={() => router.back()}>
+          <Pressable style={style.backIcon} onPress={() => backOrReplace("/(schedule)/link-page")}>
             <ArrowLeft size={29} color={Colors.primaria3} />
           </Pressable>
 
@@ -323,30 +292,12 @@ function SelectServiceContent() {
 
         <View style={style.card}>
           <View style={style.company}>
-            <View style={style.companyImage} />
-
             <View>
-              <Text style={style.companyName}>Barbearia NJ</Text>
-
-              <Text style={style.companyType}>Corte e barba</Text>
+              <Text style={style.companyName}>{company.name}</Text>
             </View>
           </View>
 
           <View style={style.infoContent}>
-            <View style={style.infoCard}>
-              <View style={style.infoTitle}>
-                <MapPin size={15} color={Colors.primaria3} />
-
-                <Text style={style.infoTitleText}>Localização</Text>
-              </View>
-
-              <Text style={style.infoDescription}>
-                Rua dos Bobos, 67
-                {"\n"}Rosolem - Hortolândia/
-                {"\n"}SP
-              </Text>
-            </View>
-
             <View style={style.infoCard}>
               <View style={style.infoTitle}>
                 <Clock3 size={15} color={Colors.primaria3} />
@@ -355,8 +306,11 @@ function SelectServiceContent() {
               </View>
 
               <Text style={style.infoDescription}>
-                Segunda a Sábado
-                {"\n"}08:00 - 19:00
+                {company.schedules.length === 0
+                  ? "Não informado"
+                  : company.schedules.map((schedule) =>
+                      `${diasSemana[schedule.weekDay]}: ${schedule.startTime} - ${schedule.endTime}`
+                    ).join("\n")}
               </Text>
             </View>
           </View>
@@ -367,14 +321,21 @@ function SelectServiceContent() {
             <View style={style.sectionLine} />
           </View>
 
+          {servicos.length === 0 && <Text style={style.infoDescription}>Nenhum serviço disponível.</Text>}
           {servicos.map((servico) => {
-            const selecionado = servicoSelecionado === servico.id;
+            const selecionado = servicoSelecionado?.companyId === bookingCompany.id &&
+              servicoSelecionado.serviceId === servico.id;
 
             return (
               <Pressable
                 key={servico.id}
                 style={[style.service, selecionado && style.serviceSelected]}
-                onPress={() => setServicoSelecionado(servico.id)}
+                onPress={() => {
+                  setSelectedSlot(null);
+                  setServicoSelecionado({ companyId: bookingCompany.id, serviceId: servico.id });
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selecionado }}
               >
                 <View
                   style={[
@@ -387,10 +348,14 @@ function SelectServiceContent() {
                 </View>
 
                 <View>
-                  <Text style={style.serviceName}>{servico.nome}</Text>
+                  <Text style={style.serviceName}>{servico.name}</Text>
+
+                  {servico.description ? (
+                    <Text style={style.serviceDetails}>{servico.description}</Text>
+                  ) : null}
 
                   <Text style={style.serviceDetails}>
-                    {servico.duracao} | {servico.preco}
+                    {servico.durationInMinutes} minutos | {servico.price === null ? "Preço não informado" : `Preço: ${servico.price}`}
                   </Text>
                 </View>
               </Pressable>
@@ -399,7 +364,7 @@ function SelectServiceContent() {
         </View>
 
         <View style={style.buttons}>
-          <Pressable style={style.buttonBack} onPress={() => router.back()}>
+          <Pressable style={style.buttonBack} onPress={() => backOrReplace("/(schedule)/link-page")}>
             <Text style={style.buttonBackText}>Voltar</Text>
           </Pressable>
 
@@ -408,14 +373,19 @@ function SelectServiceContent() {
               style.buttonNext,
 
               {
-                opacity: servicoSelecionado === null ? 0.65 : 1,
+                opacity: !servico ? 0.65 : 1,
               },
             ]}
             onPress={proximo}
+            disabled={!servico}
+            accessibilityState={{ disabled: !servico }}
           >
             <Text style={style.buttonNextText}>Próximo</Text>
           </Pressable>
         </View>
+        {!servico && servicos.length > 0 && (
+          <Text style={style.infoDescription}>Selecione um serviço para continuar.</Text>
+        )}
       </ScrollView>
     </View>
   );

@@ -2,8 +2,11 @@ import { useRouter } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
+import { useBookingCompany } from "@/contexts/booking-company";
+import { companyIdFromLink, getCompany } from "@/services/company";
 import React from "react";
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -45,7 +48,7 @@ function styleContent(width: number, height: number) {
       width: "75%",
       height: 2,
       backgroundColor: Colors.background,
-      marginTop: height * 0.030,
+      marginTop: height * 0.03,
     },
 
     twContent: {
@@ -102,18 +105,64 @@ function styleContent(width: number, height: number) {
 
 function LinkContent() {
   const router = useRouter();
+
   const { width, height } = useDimension();
   const style = styleContent(width, height);
 
   const [link, setLink] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const pending = React.useRef(false);
+  const {
+    setBookingCompany,
+    setSelectedSlot,
+    setCustomerDraft,
+    appointmentState,
+    setAppointmentState,
+  } = useBookingCompany();
 
-  function continuar() {
-    if (link.trim() === "") {
+  async function continuar() {
+    if (pending.current) return;
+    if (appointmentState.status === "submitting") {
+      setError("Aguarde a resposta da reserva em andamento.");
       return;
     }
-
-    // Futuramente, consultar a agenda pelo link.
-    console.log("Link informado:", link);
+    if (appointmentState.status === "uncertain") {
+      Alert.alert(
+        "Resultado da reserva incerto",
+        "A reserva anterior pode ter sido criada. Confira com a empresa antes de iniciar outra reserva, pois isso pode gerar duplicidade.",
+        [
+          { text: "Aguardar", style: "cancel" },
+          {
+            text: "Habilitar nova reserva",
+            onPress: () => setAppointmentState({ status: "idle" }),
+          },
+        ],
+      );
+      return;
+    }
+    pending.current = true;
+    setLoading(true);
+    setError("");
+    setBookingCompany(null);
+    setSelectedSlot(null);
+    setCustomerDraft(null);
+    try {
+      const companyId = companyIdFromLink(link);
+      const company = await getCompany(companyId);
+      setAppointmentState({ status: "idle" });
+      setBookingCompany({ id: companyId, company });
+      router.push("/(schedule)/services");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível consultar a empresa. Tente novamente.",
+      );
+    } finally {
+      pending.current = false;
+      setLoading(false);
+    }
   }
 
   return (
@@ -129,7 +178,11 @@ function LinkContent() {
       >
         <View style={style.onContent}>
           <Pressable
-            onPress={() => router.push("/(dashboard)")}
+            onPress={() => {
+              setCustomerDraft(null);
+              router.push("/(dashboard)/home");
+            }}
+            disabled={loading}
             style={{
               justifyContent: "center",
               alignItems: "center",
@@ -161,17 +214,29 @@ function LinkContent() {
             autoCapitalize="none"
             autoCorrect={false}
             value={link}
-            onChangeText={setLink}
+            editable={!loading}
+            onChangeText={(value) => {
+              setLink(value);
+              setError("");
+            }}
           />
+
+          {error ? (
+            <Text accessibilityRole="alert" style={{ color: "#b42318", marginTop: 8 }}>
+              {error}
+            </Text>
+          ) : null}
 
           <Pressable
             style={({ pressed }) => [
               style.btContinue,
-              { opacity: pressed ? 0.8 : 1 },
+              { opacity: loading ? 0.6 : pressed ? 0.8 : 1 },
             ]}
             onPress={continuar}
+            disabled={loading}
+            accessibilityState={{ disabled: loading, busy: loading }}
           >
-            <Text style={style.txtBtContinue}>Continuar</Text>
+            <Text style={style.txtBtContinue}>{loading ? "Consultando..." : "Continuar"}</Text>
           </Pressable>
         </View>
       </ScrollView>

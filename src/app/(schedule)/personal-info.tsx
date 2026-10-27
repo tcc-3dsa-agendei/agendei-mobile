@@ -1,12 +1,19 @@
-
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useIsFocused, useLocalSearchParams } from "expo-router";
+import { useBookingCompany } from "@/contexts/booking-company";
+import {
+  emptyPersonalInfo,
+  personalInfoSchema,
+  type PersonalInfo,
+  type PersonalInfoErrors,
+} from "@/services/personal-info";
+import { firstIncompleteStep } from "@/services/booking-guard";
+import { backOrReplace } from "@/services/navigation";
 import { ArrowLeft } from "lucide-react-native";
 import React from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -135,6 +142,8 @@ function styleContent(width: number, height: number) {
       color: "#333333",
     },
 
+    error: { color: "#b42318", fontFamily: Fonts.pRegular, fontSize: 13, marginTop: 6 },
+
     reset: {
       width: "100%",
       height: 37,
@@ -198,65 +207,59 @@ function PersonalInfoContent() {
   const style = styleContent(width, height);
 
   const params = useLocalSearchParams<{
-    agenda?: string;
     servicoId?: string;
-    servico?: string;
-    duracao?: string;
-    preco?: string;
-    data?: string;
-    horario?: string;
   }>();
 
-  const [nome, setNome] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [telefone, setTelefone] = React.useState("");
+  const { bookingCompany, selectedSlot, customerDraft, setCustomerDraft } = useBookingCompany();
+  const isFocused = useIsFocused();
+  const [errors, setErrors] = React.useState<PersonalInfoErrors>({});
+  const step = firstIncompleteStep(bookingCompany, params.servicoId, selectedSlot, customerDraft);
+  if (step === "link" || !bookingCompany)
+    return isFocused ? <Redirect href="/(schedule)/link-page" /> : null;
+  if (step === "services") return isFocused ? <Redirect href="/(schedule)/services" /> : null;
+  if (step === "datetime")
+    return isFocused ? (
+      <Redirect
+        href={{ pathname: "/(schedule)/datetime", params: { servicoId: params.servicoId } }}
+      />
+    ) : null;
+  const companyId = bookingCompany.id;
+  const fields = customerDraft?.companyId === companyId ? customerDraft.fields : emptyPersonalInfo;
 
-  function formatarTelefone(valor: string) {
-    const numeros = valor.replace(/\D/g, "").slice(0, 11);
-
-    if (numeros.length <= 2) {
-      return numeros;
-    }
-
-    if (numeros.length <= 7) {
-      return `(${numeros.slice(0, 2)}) ${numeros.slice(2)}`;
-    }
-
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`;
+  function updateField(field: keyof PersonalInfo, value: string) {
+    setCustomerDraft((previous) => ({
+      companyId,
+      fields: {
+        ...(previous?.companyId === companyId ? previous.fields : emptyPersonalInfo),
+        [field]: value,
+      },
+    }));
+    setErrors((previous) => ({ ...previous, [field]: undefined }));
   }
 
   function limpar() {
-    setNome("");
-    setEmail("");
-    setTelefone("");
+    setCustomerDraft(null);
+    setErrors({});
   }
 
   function proximo() {
-    if (nome.trim().length < 6) {
-      Alert.alert("Atenção", "Digite seu nome completo.");
+    const result = personalInfoSchema.safeParse(fields);
+    if (!result.success) {
+      const nextErrors: PersonalInfoErrors = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0];
+        if ((field === "name" || field === "email" || field === "phone") && !nextErrors[field]) {
+          nextErrors[field] = issue.message;
+        }
+      }
+      setErrors(nextErrors);
       return;
     }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      Alert.alert("Atenção", "Digite um e-mail válido.");
-      return;
-    }
-
-    if (telefone.replace(/\D/g, "").length !== 11) {
-      Alert.alert(
-        "Atenção",
-        "Digite um telefone com DDD e 11 dígitos."
-      );
-      return;
-    }
-
+    setErrors({});
     router.push({
-      pathname: "./confirmation",
+      pathname: "/(schedule)/confirmation",
       params: {
-        ...params,
-        nome: nome.trim(),
-        email: email.trim(),
-        telefone,
+        servicoId: params.servicoId,
       },
     });
   }
@@ -275,7 +278,12 @@ function PersonalInfoContent() {
         >
           <Pressable
             style={style.backIcon}
-            onPress={() => router.back()}
+            onPress={() =>
+              backOrReplace({
+                pathname: "/(schedule)/datetime",
+                params: { servicoId: params.servicoId },
+              })
+            }
           >
             <ArrowLeft size={29} color={Colors.primaria3} />
           </Pressable>
@@ -283,21 +291,9 @@ function PersonalInfoContent() {
           <View style={style.progress}>
             {[1, 2, 3, 4].map((etapa) => (
               <React.Fragment key={etapa}>
-                {etapa > 1 && (
-                  <View
-                    style={[
-                      style.progressLine,
-                      etapa <= 3 && style.activeLine,
-                    ]}
-                  />
-                )}
+                {etapa > 1 && <View style={[style.progressLine, etapa <= 3 && style.activeLine]} />}
 
-                <View
-                  style={[
-                    style.circle,
-                    etapa <= 3 && style.activeCircle,
-                  ]}
-                />
+                <View style={[style.circle, etapa <= 3 && style.activeCircle]} />
               </React.Fragment>
             ))}
           </View>
@@ -308,44 +304,40 @@ function PersonalInfoContent() {
           </Text>
 
           <Text style={style.description}>
-            Para a criação do seu agendamento,
-            informe seus dados pessoais abaixo.
+            Para a criação do seu agendamento, informe seus dados pessoais abaixo.
           </Text>
 
           <View style={style.card}>
             <View style={style.field}>
               <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu nome
-                </Text>
+                <Text style={style.secText}>Digite seu nome</Text>
                 <View style={style.secLine} />
               </View>
 
-              <Text style={style.hint}>
-                Mínimo 6 caracteres
-              </Text>
+              <Text style={style.hint}>De 1 a 150 caracteres</Text>
 
               <TextInput
                 style={style.input}
                 placeholder="Ex: João Silva"
                 placeholderTextColor="#888888"
-                value={nome}
-                onChangeText={setNome}
+                value={fields.name}
+                onChangeText={(value) => updateField("name", value)}
                 autoCapitalize="words"
               />
+              {errors.name && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.name}
+                </Text>
+              )}
             </View>
 
             <View style={style.field}>
               <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu e-mail
-                </Text>
+                <Text style={style.secText}>Digite seu e-mail</Text>
                 <View style={style.secLine} />
               </View>
 
-              <Text style={style.hint}>
-                Informe um e-mail válido
-              </Text>
+              <Text style={style.hint}>Informe um e-mail válido</Text>
 
               <TextInput
                 style={style.input}
@@ -354,63 +346,59 @@ function PersonalInfoContent() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
+                value={fields.email}
+                onChangeText={(value) => updateField("email", value)}
               />
+              {errors.email && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.email}
+                </Text>
+              )}
             </View>
 
             <View style={style.field}>
               <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu número
-                </Text>
+                <Text style={style.secText}>Digite seu número</Text>
                 <View style={style.secLine} />
               </View>
 
-              <Text style={style.hint}>
-                Mínimo 11 dígitos
-              </Text>
+              <Text style={style.hint}>Telefone brasileiro com DDD, fixo ou celular</Text>
 
               <TextInput
                 style={style.input}
                 placeholder="Ex: (19) 99999-9999"
                 placeholderTextColor="#888888"
                 keyboardType="phone-pad"
-                value={telefone}
-                onChangeText={(valor) =>
-                  setTelefone(formatarTelefone(valor))
-                }
-                maxLength={15}
+                value={fields.phone}
+                onChangeText={(value) => updateField("phone", value)}
               />
+              {errors.phone && (
+                <Text accessibilityRole="alert" style={style.error}>
+                  {errors.phone}
+                </Text>
+              )}
             </View>
 
-            <Pressable
-              style={style.reset}
-              onPress={limpar}
-            >
-              <Text style={style.resetText}>
-                Limpar
-              </Text>
+            <Pressable style={style.reset} onPress={limpar}>
+              <Text style={style.resetText}>Limpar</Text>
             </Pressable>
           </View>
 
           <View style={style.buttons}>
             <Pressable
               style={style.buttonBack}
-              onPress={() => router.back()}
+              onPress={() =>
+                backOrReplace({
+                  pathname: "/(schedule)/datetime",
+                  params: { servicoId: params.servicoId },
+                })
+              }
             >
-              <Text style={style.buttonBackText}>
-                Voltar
-              </Text>
+              <Text style={style.buttonBackText}>Voltar</Text>
             </Pressable>
 
-            <Pressable
-              style={style.buttonNext}
-              onPress={proximo}
-            >
-              <Text style={style.buttonNextText}>
-                Próximo
-              </Text>
+            <Pressable style={style.buttonNext} onPress={proximo}>
+              <Text style={style.buttonNextText}>Próximo</Text>
             </Pressable>
           </View>
         </ScrollView>
