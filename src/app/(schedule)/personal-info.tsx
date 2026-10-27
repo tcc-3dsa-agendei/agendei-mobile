@@ -1,16 +1,13 @@
-
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import React from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -196,6 +193,14 @@ function styleContent(width: number, height: number) {
 function PersonalInfoContent() {
   const { width, height } = useDimension();
   const style = styleContent(width, height);
+  const scrollRef = React.useRef<KeyboardAwareScrollView>(null);
+
+  const scrollToInput: NonNullable<
+    React.ComponentProps<typeof TextInput>["onFocus"]
+  > = (event) => {
+    // Also adjust when focus changes while the keyboard is already open.
+    scrollRef.current?.scrollToFocusedInput(event.nativeEvent.target, 50);
+  };
 
   const params = useLocalSearchParams<{
     agenda?: string;
@@ -243,10 +248,7 @@ function PersonalInfoContent() {
     }
 
     if (telefone.replace(/\D/g, "").length !== 11) {
-      Alert.alert(
-        "Atenção",
-        "Digite um telefone com DDD e 11 dígitos."
-      );
+      Alert.alert("Atenção", "Digite um telefone com DDD e 11 dígitos.");
       return;
     }
 
@@ -263,158 +265,124 @@ function PersonalInfoContent() {
 
   return (
     <View style={style.background}>
-      <KeyboardAvoidingView
-        style={{ flex: 1, width: "100%" }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      <KeyboardAwareScrollView
+        ref={scrollRef}
+        style={style.scroll}
+        contentContainerStyle={style.content}
+        enableOnAndroid={true}
+        extraScrollHeight={30}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={style.scroll}
-          contentContainerStyle={style.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Pressable
-            style={style.backIcon}
-            onPress={() => router.back()}
-          >
-            <ArrowLeft size={29} color={Colors.primaria3} />
-          </Pressable>
+        <Pressable style={style.backIcon} onPress={() => router.back()}>
+          <ArrowLeft size={29} color={Colors.primaria3} />
+        </Pressable>
 
-          <View style={style.progress}>
-            {[1, 2, 3, 4].map((etapa) => (
-              <React.Fragment key={etapa}>
-                {etapa > 1 && (
-                  <View
-                    style={[
-                      style.progressLine,
-                      etapa <= 3 && style.activeLine,
-                    ]}
-                  />
-                )}
-
+        <View style={style.progress}>
+          {[1, 2, 3, 4].map((etapa) => (
+            <React.Fragment key={etapa}>
+              {etapa > 1 && (
                 <View
                   style={[
-                    style.circle,
-                    etapa <= 3 && style.activeCircle,
+                    style.progressLine,
+                    etapa <= 3 && style.activeLine,
                   ]}
                 />
-              </React.Fragment>
-            ))}
-          </View>
+              )}
 
-          <Text style={style.title}>
-            Informe seus dados{"\n"}
-            pessoais
-          </Text>
-
-          <Text style={style.description}>
-            Para a criação do seu agendamento,
-            informe seus dados pessoais abaixo.
-          </Text>
-
-          <View style={style.card}>
-            <View style={style.field}>
-              <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu nome
-                </Text>
-                <View style={style.secLine} />
-              </View>
-
-              <Text style={style.hint}>
-                Mínimo 6 caracteres
-              </Text>
-
-              <TextInput
-                style={style.input}
-                placeholder="Ex: João Silva"
-                placeholderTextColor="#888888"
-                value={nome}
-                onChangeText={setNome}
-                autoCapitalize="words"
+              <View
+                style={[style.circle, etapa <= 3 && style.activeCircle]}
               />
+            </React.Fragment>
+          ))}
+        </View>
+
+        <Text style={style.title}>
+          Informe seus dados{"\n"}
+          pessoais
+        </Text>
+
+        <Text style={style.description}>
+          Para a criação do seu agendamento, informe seus dados pessoais
+          abaixo.
+        </Text>
+
+        <View style={style.card}>
+          <View style={style.field}>
+            <View style={style.secTitle}>
+              <Text style={style.secText}>Digite seu nome</Text>
+              <View style={style.secLine} />
             </View>
 
-            <View style={style.field}>
-              <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu e-mail
-                </Text>
-                <View style={style.secLine} />
-              </View>
+            <Text style={style.hint}>Mínimo 6 caracteres</Text>
 
-              <Text style={style.hint}>
-                Informe um e-mail válido
-              </Text>
-
-              <TextInput
-                style={style.input}
-                placeholder="Ex: joaosilva@gmail.com"
-                placeholderTextColor="#888888"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
-              />
-            </View>
-
-            <View style={style.field}>
-              <View style={style.secTitle}>
-                <Text style={style.secText}>
-                  Digite seu número
-                </Text>
-                <View style={style.secLine} />
-              </View>
-
-              <Text style={style.hint}>
-                Mínimo 11 dígitos
-              </Text>
-
-              <TextInput
-                style={style.input}
-                placeholder="Ex: (19) 99999-9999"
-                placeholderTextColor="#888888"
-                keyboardType="phone-pad"
-                value={telefone}
-                onChangeText={(valor) =>
-                  setTelefone(formatarTelefone(valor))
-                }
-                maxLength={15}
-              />
-            </View>
-
-            <Pressable
-              style={style.reset}
-              onPress={limpar}
-            >
-              <Text style={style.resetText}>
-                Limpar
-              </Text>
-            </Pressable>
+            <TextInput
+              style={style.input}
+              placeholder="Ex: João Silva"
+              placeholderTextColor="#888888"
+              value={nome}
+              onChangeText={setNome}
+              onFocus={scrollToInput}
+              autoCapitalize="words"
+            />
           </View>
 
-          <View style={style.buttons}>
-            <Pressable
-              style={style.buttonBack}
-              onPress={() => router.back()}
-            >
-              <Text style={style.buttonBackText}>
-                Voltar
-              </Text>
-            </Pressable>
+          <View style={style.field}>
+            <View style={style.secTitle}>
+              <Text style={style.secText}>Digite seu e-mail</Text>
+              <View style={style.secLine} />
+            </View>
 
-            <Pressable
-              style={style.buttonNext}
-              onPress={proximo}
-            >
-              <Text style={style.buttonNextText}>
-                Próximo
-              </Text>
-            </Pressable>
+            <Text style={style.hint}>Informe um e-mail válido</Text>
+
+            <TextInput
+              style={style.input}
+              placeholder="Ex: joaosilva@gmail.com"
+              placeholderTextColor="#888888"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={email}
+              onChangeText={setEmail}
+              onFocus={scrollToInput}
+            />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          <View style={style.field}>
+            <View style={style.secTitle}>
+              <Text style={style.secText}>Digite seu número</Text>
+              <View style={style.secLine} />
+            </View>
+
+            <Text style={style.hint}>Mínimo 11 dígitos</Text>
+
+            <TextInput
+              style={style.input}
+              placeholder="Ex: (19) 99999-9999"
+              placeholderTextColor="#888888"
+              keyboardType="phone-pad"
+              value={telefone}
+              onChangeText={(valor) => setTelefone(formatarTelefone(valor))}
+              onFocus={scrollToInput}
+              maxLength={15}
+            />
+          </View>
+
+          <Pressable style={style.reset} onPress={limpar}>
+            <Text style={style.resetText}>Limpar</Text>
+          </Pressable>
+        </View>
+
+        <View style={style.buttons}>
+          <Pressable style={style.buttonBack} onPress={() => router.back()}>
+            <Text style={style.buttonBackText}>Voltar</Text>
+          </Pressable>
+
+          <Pressable style={style.buttonNext} onPress={proximo}>
+            <Text style={style.buttonNextText}>Próximo</Text>
+          </Pressable>
+        </View>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import React from "react";
 import {
   Image,
@@ -20,8 +21,14 @@ function styleContent(width: number, height: number) {
       flex: 1,
       width: width * 0.9,
       alignItems: "center",
+      justifyContent: "center",
     },
-
+    key: {
+      flexGrow: 1,
+      justifyContent: "center",
+      alignContent: "center",
+      width: width * 0.9,
+    },
     onContent: {
       width: "100%",
       height: height * 0.34,
@@ -45,7 +52,7 @@ function styleContent(width: number, height: number) {
       width: "75%",
       height: 2,
       backgroundColor: Colors.background,
-      marginTop: height * 0.030,
+      marginTop: height * 0.03,
     },
 
     twContent: {
@@ -77,7 +84,7 @@ function styleContent(width: number, height: number) {
       paddingHorizontal: 15,
       fontSize: width * 0.036,
       fontFamily: Fonts.pRegular,
-      color: Colors.background,
+      color: "black",
       elevation: 2,
     },
 
@@ -118,63 +125,72 @@ function LinkContent() {
 
   return (
     <View style={style.background}>
-      <ScrollView
-        style={{ width: "100%" }}
-        contentContainerStyle={{
-          alignItems: "center",
-          paddingBottom: 30,
-        }}
+      <KeyboardAwareScrollView
+        contentContainerStyle={style.key}
+        enableOnAndroid={true}
+        extraScrollHeight={5}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
-        <View style={style.onContent}>
-          <Pressable
-            onPress={() => router.push("/(dashboard)")}
-            style={{
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <Image
-              style={style.logo}
-              source={require("@/assets/images/logo.png")}
-              resizeMode="contain"
+        <ScrollView
+          style={{ width: "100%",
+            height: height * 0.5,
+           }}
+          contentContainerStyle={{
+            alignItems: "center",
+            paddingBottom: 0,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={style.onContent}>
+            <Pressable
+              onPress={() => router.push("/(dashboard)")}
+              style={{
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Image
+                style={style.logo}
+                source={require("@/assets/images/logo.png")}
+                resizeMode="contain"
+              />
+
+              <Text style={style.title}>Agendei.com</Text>
+            </Pressable>
+            <View style={style.line} />
+          </View>
+
+          <View style={style.twContent}>
+            <Text style={style.secTitle}>Agende seu{"\n"}horário</Text>
+
+            <Text style={style.description}>
+              Cole o link da agenda da empresa que você recebeu e continue
+            </Text>
+
+            <TextInput
+              style={style.input}
+              placeholder="Cole o link da agenda aqui"
+              placeholderTextColor="#808080"
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={link}
+              onChangeText={setLink}
             />
 
-            <Text style={style.title}>Agendei.com</Text>
-          </Pressable>
-          <View style={style.line} />
-        </View>
-
-        <View style={style.twContent}>
-          <Text style={style.secTitle}>Agende seu{"\n"}horário</Text>
-
-          <Text style={style.description}>
-            Cole o link da agenda da empresa que você recebeu e continue
-          </Text>
-
-          <TextInput
-            style={style.input}
-            placeholder="Cole o link da agenda aqui"
-            placeholderTextColor="#808080"
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={link}
-            onChangeText={setLink}
-          />
-
-          <Pressable
-            style={({ pressed }) => [
-              style.btContinue,
-              { opacity: pressed ? 0.8 : 1 },
-            ]}
-            onPress={continuar}
-          >
-            <Text style={style.txtBtContinue}>Continuar</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+            <Pressable
+              style={({ pressed }) => [
+                style.btContinue,
+                { opacity: pressed ? 0.8 : 1 },
+              ]}
+              onPress={continuar}
+            >
+              <Text style={style.txtBtContinue}>Continuar</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
