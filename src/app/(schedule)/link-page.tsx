@@ -1,4 +1,4 @@
-
+import { useRouter } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { useDimension } from "@/hooks/useDimension";
@@ -42,15 +42,15 @@ function styleContent(width: number, height: number) {
     },
 
     line: {
-      width: "80%",
+      width: "75%",
       height: 2,
-      backgroundColor: Colors.secundaria2,
-      marginTop: height * 0.045,
+      backgroundColor: Colors.background,
+      marginTop: height * 0.030,
     },
 
     twContent: {
       width: "82%",
-      marginTop: height * 0.025,
+      marginTop: height * 0.005,
     },
 
     secTitle: {
@@ -101,6 +101,7 @@ function styleContent(width: number, height: number) {
 }
 
 function LinkContent() {
+  const router = useRouter();
   const { width, height } = useDimension();
   const style = styleContent(width, height);
 
@@ -127,32 +128,34 @@ function LinkContent() {
         showsVerticalScrollIndicator={false}
       >
         <View style={style.onContent}>
-          <Image
-            style={style.logo}
-            source={require("@/assets/images/logo.png")}
-            resizeMode="contain"
-          />
+          <Pressable
+            onPress={() => router.push("/(dashboard)")}
+            style={{
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <Image
+              style={style.logo}
+              source={require("@/assets/images/logo.png")}
+              resizeMode="contain"
+            />
 
-          <Text style={style.title}>
-            Agendei.com
-          </Text>
-
+            <Text style={style.title}>Agendei.com</Text>
+          </Pressable>
           <View style={style.line} />
         </View>
 
         <View style={style.twContent}>
-          <Text style={style.secTitle}>
-            Agende seu{"\n"}horário
-          </Text>
+          <Text style={style.secTitle}>Agende seu{"\n"}horário</Text>
 
           <Text style={style.description}>
-            Cole o link da agenda da empresa que você
-            recebeu e continue
+            Cole o link da agenda da empresa que você recebeu e continue
           </Text>
 
           <TextInput
             style={style.input}
-            placeholder="🔗 Cole o link da agenda aqui"
+            placeholder="Cole o link da agenda aqui"
             placeholderTextColor="#808080"
             keyboardType="url"
             autoCapitalize="none"
@@ -168,9 +171,7 @@ function LinkContent() {
             ]}
             onPress={continuar}
           >
-            <Text style={style.txtBtContinue}>
-              Continuar
-            </Text>
+            <Text style={style.txtBtContinue}>Continuar</Text>
           </Pressable>
         </View>
       </ScrollView>

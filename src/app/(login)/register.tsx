@@ -168,25 +168,7 @@ function styleContent(width: number, height: number) {
       color: Colors.primaria3,
       fontSize: width * 0.037,
       fontFamily: Fonts.pBold,
-    },
-
-    topStyle: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: width * 0.12,
-      height: height * 0.095,
-      backgroundColor: Colors.primaria3,
-    },
-
-    botStyle: {
-      position: "absolute",
-      bottom: 0,
-      right: 0,
-      width: width * 0.12,
-      height: height * 0.095,
-      backgroundColor: Colors.primaria3,
-    },
+    }
   });
 }
 
@@ -199,7 +181,6 @@ function RegisterContent() {
 
   return (
     <View style={style.background}>
-      <View style={style.topStyle} />
 
       <ScrollView
         style={{ width: "100%" }}
@@ -295,8 +276,6 @@ function RegisterContent() {
           <Text style={style.txtBtEnter}>Fazer login</Text>
         </Pressable>
       </ScrollView>
-
-      <View style={style.botStyle} />
     </View>
   );
 }

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-
+import AntDesign from '@expo/vector-icons/AntDesign';
 import { Colors } from "@/constants/colors";
 import { Fonts } from "@/constants/fonts";
 import { MainLayout } from "../../components/layout";
@@ -69,23 +69,51 @@ function HomeContent() {
       </View>
 
       <View style={style.bottons}>
-        <Pressable
-          style={style.bnt1}
-          onPress={() => router.push("/(login)/login")}
-          android_ripple={{
-            color: Colors.androidRipple,
-          }}
-        >
-          <Text
+        <View style={{
+          flex: 0,
+          justifyContent: "space-between",
+          flexDirection: "row",
+          width: "100%",
+          height: 45,
+          gap: 1
+        }}>
+          <Pressable
+            style={style.bnt1}
+            onPress={() => router.push("/(login)/login")}
+            android_ripple={{
+              color: Colors.androidRipple,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: Fonts.pBold,
+                color: Colors.secundaria2,
+                fontSize: 12,
+              }}
+            >
+              Agendar
+            </Text>
+          </Pressable>
+          <Pressable
             style={{
+              width: "15%",
+              height: 45,
+              justifyContent: "center",
+              alignItems: "center",
+              backgroundColor: Colors.primaria1,
+              borderRadius: 5,
+            }}
+            onPress={() => router.push("/(schedule)/link-page")}
+          >
+            <Text style={{
               fontFamily: Fonts.pBold,
               color: Colors.secundaria2,
               fontSize: 12,
-            }}
-          >
-            Agendar
-          </Text>
-        </Pressable>
+            }}>
+              <AntDesign name="link" size={20} color={Colors.secundaria2} />
+            </Text>
+          </Pressable>
+        </View>
         <Pressable
           style={style.bnt2}
           onPress={() => router.push("/(dashboard)/about")}
@@ -151,7 +179,6 @@ const style = StyleSheet.create({
   bottons: {
     position: "absolute",
     justifyContent: "space-between",
-    alignItems: "center",
     top: "63%",
     width: "100%",
     height: 100,
@@ -160,7 +187,7 @@ const style = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.primaria3,
-    width: "100%",
+    width: "84%",
     height: 45,
     borderRadius: 5,
   },
