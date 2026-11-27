@@ -1,0 +1,8 @@
+*.ts linguist-language=TypeScript
+*.tsx linguist-language=TSX
+
+*.ts linguist-detectable=true
+*.tsx linguist-detectable=true
+
+node_modules/** linguist-vendored
+.expo/** linguist-generated
